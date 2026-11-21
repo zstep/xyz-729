@@ -11,7 +11,9 @@ export interface HarnessBootPayload {
 export function isHarnessShellUrl(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl)
-    return url.protocol === 'dsh-desktop:' && url.host === 'harness' && url.username === '' && url.password === ''
+    if (url.username !== '' || url.password !== '') return false
+    return (url.protocol === 'dsh-desktop:' && url.host === 'harness') ||
+      (url.protocol === 'dsh-app:' && url.host === 'app')
   } catch {
     return false
   }

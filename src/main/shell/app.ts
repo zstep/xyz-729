@@ -1639,7 +1639,7 @@ async function main(): Promise<void> {
     assertMain(event)
     platformView.close()
   })
-  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
+  const hostWebSocketHeaders = (details: Electron.OnBeforeSendHeadersListenerDetails, callback: (response: Electron.BeforeSendResponse) => void): void => {
     const url = hostUrl()
     const cookie = hostCookie()
     if (url === undefined || cookie === undefined || details.webContentsId !== mainWindow?.webContents.id) {
@@ -1658,7 +1658,13 @@ async function main(): Promise<void> {
       return
     }
     callback({ requestHeaders: { ...headers, origin: target.origin, cookie, 'sec-fetch-site': 'same-origin' } })
-  })
+  }
+  // The workspace window uses its account partition, not defaultSession.
+  // Register on both so legacy pages and the account-owned workspace share
+  // the same authenticated WebSocket handshake.
+  for (const hostSession of [session.fromPartition(activeAccount!.partition), session.defaultSession]) {
+    hostSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, hostWebSocketHeaders)
+  }
   app.on('second-instance', () => { showMainWindow() })
   app.on('activate', () => { showMainWindow() })
   let hostReady = false

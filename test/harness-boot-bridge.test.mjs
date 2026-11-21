@@ -112,5 +112,12 @@ describe('local shell origin boundary', () => {
     expect(canGrantWindowPermission('clipboard-read', 'dsh-desktop://harness/', true)).toBe(false)
     expect(isHarnessShellUrl('dsh-desktop://user:pass@harness/')).toBe(false)
     expect(isHarnessShellUrl('dsh-desktop://harness:1234/')).toBe(false)
+    // V0.14 app shell
+    expect(isHarnessShellUrl('dsh-app://app/')).toBe(true)
+    expect(isHarnessShellUrl('dsh-app://app/index.html')).toBe(true)
+    expect(isHarnessShellUrl('dsh-app://other/')).toBe(false)
+    expect(isHarnessShellUrl('dsh-app://user:pass@app/')).toBe(false)
+    expect(canGrantWindowPermission('notifications', 'dsh-app://app/', true)).toBe(true)
+    expect(canGrantWindowPermission('notifications', 'dsh-app://other/', true)).toBe(false)
   })
 })
