@@ -79,7 +79,7 @@ export function createSettings(ctx, validate = validateConnection, desktopBridge
     const provider = selectedProvider(state)
     if (provider === 'pengbao') {
       requireManagedAvailable(await refreshStatus(signal))
-      return { provider, generate: desktopBridge.generate, model_selection: 'server-managed' }
+      return { provider, generate: desktopBridge.generate, edit: desktopBridge.edit, model_selection: 'server-managed' }
     }
     const spec = state.profiles[provider]
     if (!spec?.key) throw new ImageError('NOT_CONFIGURED', 'Configure the image tool in Settings > Plugins before generating an image.')

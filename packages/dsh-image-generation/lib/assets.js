@@ -1,4 +1,6 @@
-import { lstat, mkdir, realpath } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { lstat, mkdir, open, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { ImageError, MAX_IMAGE_BYTES } from './provider.js'
 
@@ -38,6 +40,42 @@ export async function assetDirectory(root, create = false) {
     }
   }
   return directory
+}
+
+/**
+ * Read one generated PNG by its content hash. The caller never supplies a path:
+ * the file must already exist in this workspace's generated-image directory and
+ * its bytes must still match the returned reference.
+ */
+export async function readGeneratedWorkspaceImage(root, sha, signal) {
+  if (typeof sha !== 'string' || !/^[a-f0-9]{64}$/.test(sha)) throw new ImageError('IMAGE', 'Invalid source image reference.', 400)
+  signal?.throwIfAborted()
+  const directory = await assetDirectory(root, false)
+  const target = path.join(directory, `${sha}.png`)
+  let file
+  try { file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK) } catch {
+    throw new ImageError('IMAGE', 'The source image is unavailable.', 404)
+  }
+  try {
+    const info = await file.stat()
+    if (!info.isFile() || info.size <= 0 || info.size > MAX_IMAGE_BYTES || await realpath(target) !== target) {
+      throw new ImageError('IMAGE', 'The source image is unavailable.', 404)
+    }
+    const data = Buffer.alloc(info.size)
+    let offset = 0
+    while (offset < data.length) {
+      signal?.throwIfAborted()
+      const { bytesRead } = await file.read(data, offset, data.length - offset, offset)
+      if (!bytesRead) break
+      offset += bytesRead
+    }
+    signal?.throwIfAborted()
+    if (offset !== data.length || createHash('sha256').update(data).digest('hex') !== sha
+      || data.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
+      throw new ImageError('IMAGE', 'The source image has changed.', 404)
+    }
+    return { data, sha256: sha, workspacePath: `.workbuddy/generated-images/${sha}.png` }
+  } finally { await file.close() }
 }
 
 export async function normalizeImage(raw) {

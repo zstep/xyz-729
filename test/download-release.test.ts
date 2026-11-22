@@ -18,13 +18,13 @@ describe('public unsigned download release', () => {
     expect(config.mac.notarize).toBe(false)
     expect(config.win.signtoolOptions.sign).toBeNull()
     expect(config.publish).toBeNull()
-    expect(config.buildVersion).toBe('0.13.2.10')
-    expect(config.mac.bundleShortVersion).toBe('0.13.2.10')
-    expect(config.extraMetadata.shortVersion).toBe('0.13.2.10')
+    expect(config.buildVersion).toBe('0.13.2.11')
+    expect(config.mac.bundleShortVersion).toBe('0.13.2.11')
+    expect(config.extraMetadata.shortVersion).toBe('0.13.2.11')
     const { AppInfo } = require('app-builder-lib/out/appInfo')
     const info = new AppInfo({ metadata: { ...pkg, ...config.extraMetadata }, config, isPrepackedAppAsar: false })
     // NSIS uses this value directly in VIProductVersion for its uninstaller.
-    expect(info.shortVersionWindows).toBe('0.13.2.10')
+    expect(info.shortVersionWindows).toBe('0.13.2.11')
   })
 
   it('builds natively and only publishes the catalog after all native jobs pass', async () => {

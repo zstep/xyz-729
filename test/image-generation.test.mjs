@@ -14,7 +14,7 @@ import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { LocalSubprocessRuntime } from '@deepseek-ai/dsh-subprocess-local'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import sharp from 'sharp'
-import { apply, CONFIGURED_IMAGE_PROMPT, IMAGE_PROMPT_SECTION, imageTool, UNCONFIGURED_IMAGE_PROMPT } from '../packages/dsh-image-generation/index.js'
+import { apply, CONFIGURED_IMAGE_PROMPT, IMAGE_PROMPT_SECTION, imageEditTool, imageTool, UNCONFIGURED_IMAGE_PROMPT } from '../packages/dsh-image-generation/index.js'
 import { createSettings } from '../packages/dsh-image-generation/lib/settings.js'
 import { DEFAULTS, MODEL_CATALOG, generate, generationBody, ImageError, profile, readBounded, validateConnection } from '../packages/dsh-image-generation/lib/provider.js'
 import { normalizeImage } from '../packages/dsh-image-generation/lib/assets.js'
@@ -183,6 +183,31 @@ describe('Pengbao managed image settings and tool', () => {
     f.setMode('read-only')
     await expect(imageTool(f.services, settings).execute({ prompt: 'Flower' }, { agent: f.agent })).rejects.toMatchObject({ code: 'POLICY' })
     expect(bridge.generate).toHaveBeenCalledTimes(1)
+  })
+  it('edits a generated image through the managed bridge and preserves the source', async () => {
+    const f = await fixture(); const s = await server()
+    const editedPng = await sharp({ create: { width: 40, height: 30, channels: 4, background: '#3366aa' } }).png().toBuffer()
+    const bridge = { status: async () => status('available'), generate: vi.fn(async () => s.png), edit: vi.fn(async () => editedPng) }
+    const settings = createSettings(f.services, vi.fn(), bridge)
+    f.ctx.tools.register(imageTool(f.services, settings))
+    f.ctx.tools.register(imageEditTool(f.services, settings))
+    const first = await executeTool(f.ctx, { callId: 'managed-edit-source', name: 'image_generate', arguments: { prompt: 'A flower' }, agent: f.agent, signal: new AbortController().signal })
+    expect(first.isError, JSON.stringify(first)).toBeFalsy()
+    const source = JSON.parse(first.content[0].text)
+    const sourcePath = path.join(f.workspace, source.workspace_path)
+    const sourceBytes = await readFile(sourcePath)
+    const edit = await executeTool(f.ctx, { callId: 'managed-edit', name: 'image_edit', arguments: {
+      source: { kind: 'generated', sha256: source.sha256 }, prompt: 'Make the flower blue'
+    }, agent: f.agent, signal: new AbortController().signal })
+    expect(edit.isError, JSON.stringify(edit)).toBeFalsy()
+    const result = JSON.parse(edit.content[0].text)
+    expect(result.sha256).not.toBe(source.sha256)
+    expect(result).toMatchObject({ provider: 'pengbao', model_selection: 'server-managed', media_type: 'image/png' })
+    expect(bridge.edit).toHaveBeenCalledOnce()
+    expect(bridge.edit.mock.calls[0][0]).toBe('Make the flower blue')
+    expect(bridge.edit.mock.calls[0][1].image).toEqual(sourceBytes)
+    expect(await readFile(sourcePath)).toEqual(sourceBytes)
+    expect(JSON.stringify(f.log.mock.calls)).toContain('edit saved')
   })
   it('rechecks live workspace permissions and rejects malformed images before committing', async () => {
     const f = await fixture(); const s = await server()

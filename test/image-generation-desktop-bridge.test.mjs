@@ -50,7 +50,7 @@ it('exports a one-shot registry with bound operations but no capability getter o
   }
   expect(() => module.registerDesktopImageBridge({ gatewayUrl: 'http://127.0.0.1:1234', capabilityToken: 'bad\nheader' })).toThrow()
   module.registerDesktopImageBridge({ gatewayUrl: 'http://127.0.0.1:1234', capabilityToken: token })
-  expect(Object.keys(module.getDesktopImageBridge())).toEqual(['status', 'models', 'generate', 'generateMany'])
+  expect(Object.keys(module.getDesktopImageBridge())).toEqual(['status', 'models', 'generate', 'edit', 'generateMany'])
   expect(Object.isFrozen(module.getDesktopImageBridge())).toBe(true)
   expect(JSON.stringify(module.getDesktopImageBridge())).not.toContain(token)
   expect(Object.keys(module)).not.toContain('reset')
@@ -75,6 +75,27 @@ it('uses fixed routes, forwards an explicit size only when provided, and keeps a
     { path: '/v1/image-generation/generate', method: 'POST', auth: `Bearer ${token}`, body: { prompt: 'A flower' } },
     { path: '/v1/image-generation/generate', method: 'POST', auth: `Bearer ${token}`, body: { prompt: 'A wide flower', size: '2048x1024' } },
   ])
+})
+
+it('edits one bounded PNG through the private route and returns the image bytes', async () => {
+  const calls = []
+  const gatewayUrl = await server(async (req, res) => {
+    let body = ''; for await (const chunk of req) body += chunk
+    calls.push({ path: req.url, method: req.method, body: JSON.parse(body) })
+    res.setHeader('content-type', 'image/png'); res.end(PNG)
+  })
+  const module = await registry(); module.registerDesktopImageBridge({ gatewayUrl, capabilityToken: token })
+  const bridge = module.getDesktopImageBridge()
+  expect(await bridge.edit('Make it blue', { image: PNG })).toEqual(PNG)
+  expect(await bridge.edit('Make it wide', { image: PNG, size: '2048x1024' })).toEqual(PNG)
+  expect(calls).toEqual([
+    { path: '/v1/image-generation/edit', method: 'POST', body: { prompt: 'Make it blue', image: PNG.toString('base64') } },
+    { path: '/v1/image-generation/edit', method: 'POST', body: { prompt: 'Make it wide', image: PNG.toString('base64'), size: '2048x1024' } },
+  ])
+  for (const image of [Buffer.from('not-png'), Buffer.alloc(0)]) {
+    await expect(bridge.edit('Invalid', { image })).rejects.toMatchObject({ code: 'IMAGE_INVALID_REQUEST' })
+  }
+  expect(calls).toHaveLength(2)
 })
 
 it.each(['request-local', 'server-only'])('exposes a bound models operation with validated %s selection and no private extras', async selection => {

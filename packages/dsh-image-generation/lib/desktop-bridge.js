@@ -90,6 +90,21 @@ export function registerDesktopImageBridge({ gatewayUrl, capabilityToken } = {})
   async function request(operation, prompt, options = {}) {
     const generate = operation === 'generate' || operation === 'generate-many'
     const batch = operation === 'generate-many'
+    const edit = operation === 'edit'
+    const longRunning = generate || edit
+    if (edit) {
+      if (!(options.image instanceof Uint8Array) || options.image.length === 0 || options.image.length > MAX_IMAGE_BYTES) {
+        throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
+      }
+      if (!Buffer.from(options.image).subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+        throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
+      }
+    }
+    if (edit && (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 8000)) throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
+    if (edit && options.size !== undefined) {
+      if (typeof options.size !== 'string' || options.size.length > 64 || /[\p{C}\p{Zl}\p{Zp}]/u.test(options.size)) throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
+      if (!/^(?:1|2|4)K$/.test(options.size) && !/^[1-9]\d{0,3}x[1-9]\d{0,3}$/.test(options.size)) throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
+    }
     if (batch && ((!Number.isSafeInteger(options.n) || options.n < 1 || options.n > 4) ||
       (options.parameterContractVersion !== undefined && options.parameterContractVersion !== 1) ||
       (options.parameterRevision !== undefined && (typeof options.parameterRevision !== 'string' || !/^[a-f0-9]{64}$/.test(options.parameterRevision))))) throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
@@ -110,13 +125,26 @@ export function registerDesktopImageBridge({ gatewayUrl, capabilityToken } = {})
     if (generate && options.detail !== undefined && (typeof options.detail !== 'string' || options.detail.length > 64 || /[\p{C}\p{Zl}\p{Zp}]/u.test(options.detail))) throw new ImageError('IMAGE_INVALID_REQUEST', ...FAILURES.IMAGE_INVALID_REQUEST)
     // Keep the generation/download phase below the 240-second tool budget,
     // reserving time for status, PNG normalization and the sandbox commit.
-    const signal = AbortSignal.any([AbortSignal.timeout(generate ? 210_000 : 15_000), ...(options.signal ? [options.signal] : [])])
+    const signal = AbortSignal.any([AbortSignal.timeout(longRunning ? 210_000 : 15_000), ...(options.signal ? [options.signal] : [])])
     try {
       signal.throwIfAborted()
+      let requestBody
+      if (longRunning) {
+        requestBody = { prompt, ...(options.size === undefined ? {} : { size: options.size }) }
+        if (edit) requestBody.image = Buffer.from(options.image).toString('base64')
+        if (generate) {
+          if (options.model !== undefined) requestBody.model = options.model.trim()
+          if (options.n !== undefined) requestBody.n = options.n
+          if (options.quality !== undefined) requestBody.quality = options.quality
+          if (options.detail !== undefined) requestBody.detail = options.detail
+          if (batch && options.parameterContractVersion !== undefined) requestBody.parameterContractVersion = options.parameterContractVersion
+          if (batch && options.parameterRevision !== undefined) requestBody.parameterRevision = options.parameterRevision
+        }
+      }
       const response = await fetch(`${base}/${operation}`, {
-        method: generate ? 'POST' : 'GET', redirect: 'error', signal,
-        headers: { Authorization: `Bearer ${capabilityToken}`, ...(generate ? { 'Content-Type': 'application/json' } : {}) },
-        ...(generate ? { body: JSON.stringify({ prompt, ...(options.size === undefined ? {} : { size: options.size }), ...(options.model === undefined ? {} : { model: options.model.trim() }), ...(options.n === undefined ? {} : { n: options.n }), ...(options.quality === undefined ? {} : { quality: options.quality }), ...(options.detail === undefined ? {} : { detail: options.detail }), ...(batch ? { ...(options.parameterContractVersion === undefined ? {} : { parameterContractVersion: options.parameterContractVersion }), ...(options.parameterRevision === undefined ? {} : { parameterRevision: options.parameterRevision }) } : {}) }) } : {}),
+        method: longRunning ? 'POST' : 'GET', redirect: 'error', signal,
+        headers: { Authorization: `Bearer ${capabilityToken}`, ...(longRunning ? { 'Content-Type': 'application/json' } : {}) },
+        ...(requestBody ? { body: JSON.stringify(requestBody) } : {}),
       })
       if (!response.ok) {
         let code, diagnostic
@@ -171,6 +199,13 @@ export function registerDesktopImageBridge({ gatewayUrl, capabilityToken } = {})
         })
         return { requested: options.n, images, failures, complete: result.complete }
       }
+      if (edit) {
+        if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'image/png') throw new ImageError('IMAGE_RESPONSE', ...FAILURES.IMAGE_RESPONSE)
+        const data = await readBounded(response, MAX_IMAGE_BYTES, signal)
+        if (!data.length || !data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new ImageError('IMAGE_RESPONSE', ...FAILURES.IMAGE_RESPONSE)
+        signal.throwIfAborted()
+        return data
+      }
       const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(type)) throw new ImageError('IMAGE_RESPONSE', ...FAILURES.IMAGE_RESPONSE)
       const data = await readBounded(response, MAX_IMAGE_BYTES, signal)
@@ -178,9 +213,9 @@ export function registerDesktopImageBridge({ gatewayUrl, capabilityToken } = {})
       return data
     } catch (error) {
       if (error?.name === 'TimeoutError') throw new ImageError('IMAGE_TIMEOUT', ...FAILURES.IMAGE_TIMEOUT)
-      if (error?.name === 'AbortError' && generate) throw new ImageError('CANCELLED', 'Image operation cancelled. The server may still have generated and charged for the image.', 499)
+      if (error?.name === 'AbortError' && longRunning) throw new ImageError('CANCELLED', 'Image operation cancelled. The server may still have generated and charged for the image.', 499)
       throw safeError(error)
     }
   }
-  bridge = Object.freeze({ status: options => request('status', undefined, options), models: options => request('models', undefined, options), generate: (prompt, options) => request('generate', prompt, options), generateMany: (prompt, options) => request('generate-many', prompt, options) })
+  bridge = Object.freeze({ status: options => request('status', undefined, options), models: options => request('models', undefined, options), generate: (prompt, options) => request('generate', prompt, options), edit: (prompt, options) => request('edit', prompt, options), generateMany: (prompt, options) => request('generate-many', prompt, options) })
 }
