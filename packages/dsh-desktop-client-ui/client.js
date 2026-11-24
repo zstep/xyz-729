@@ -394,7 +394,14 @@ applyRepair(ctx)
       ctx.slots.inject('sidebar.right.tab.document.actions', () =>
         ctx.slots.register({
           name: 'sidebar.right.tab.document.actions',
-          id: 'desktop-publish-html',
+          id: 'desktop-publish-html-preview',
+          inject: () => ({})
+        }, PublishHtmlActionSlot)
+      )
+      ctx.slots.inject('deliverables.file.actions', () =>
+        ctx.slots.register({
+          name: 'deliverables.file.actions',
+          id: 'desktop-publish-html-deliverable',
           inject: () => ({})
         }, PublishHtmlActionSlot)
       )
