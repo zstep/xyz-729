@@ -43,6 +43,7 @@ const DESKTOP_WORKBENCH_ROW = `    - id: dsh-desktop-workbenches
       name: dsh-desktop-workbenches
       config:
         root: !!js dshHomePath('desktop-workbenches')
+        catalogUrl: https://market.dshdesktop.com/index.json
 `
 
 const DESKTOP_MARKET_ROW = `    - id: dsh-desktop-market-installer

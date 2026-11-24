@@ -86,6 +86,8 @@ export interface PengbaoGateway {
   videoModels: (signal?: AbortSignal) => Promise<VideoCatalogRow[]>
   /** Bootstrap-only broker. Child tokens authorize only approved plugin routes/models. */
   createPluginConfigurationLease: () => PluginConfigurationLease
+  /** Publish one already-authorized local HTML artifact through the account API. */
+  publishHtml: (html: string) => Promise<{ url: string; expires_at: number | null }>
   stop: () => Promise<void>
 }
 
@@ -671,6 +673,20 @@ export async function startPengbaoGateway(options: PengbaoGatewayOptions): Promi
     }
   }
 
+  async function publishHtml(html: string): Promise<{ url: string; expires_at: number | null }> {
+    if (typeof html !== 'string' || html.length === 0 || Buffer.byteLength(html, 'utf8') > 5 * 1024 * 1024) throw new Error('Invalid HTML artifact')
+    const response = await upstreamFetch(`${PENGBAO_PRODUCT.serverUrl}/api/v1/published`, {
+      method: 'POST', redirect: 'error', credentials: 'omit',
+      headers: { Authorization: `Bearer ${jwt}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html })
+    })
+    if (!response.ok) throw new Error('Could not publish HTML artifact')
+    const value = await response.json() as unknown
+    if (!value || typeof value !== 'object' || typeof (value as { url?: unknown }).url !== 'string') throw new Error('Invalid publish response')
+    const expiresAt = (value as { expires_at?: unknown }).expires_at
+    return { url: (value as { url: string }).url, expires_at: typeof expiresAt === 'number' ? expiresAt : null }
+  }
+
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(0, '127.0.0.1', () => { server.removeListener('error', reject); resolve() })
@@ -687,6 +703,7 @@ export async function startPengbaoGateway(options: PengbaoGatewayOptions): Promi
     createVideoLease: models => videos.createLease({ models }),
     videoModels: signal => videos.models(signal ?? AbortSignal.timeout(10000)),
     createPluginConfigurationLease: pluginConfiguration.createLease,
+    publishHtml,
     stop: () => {
       if (stopPromise) return stopPromise
       stopping = true

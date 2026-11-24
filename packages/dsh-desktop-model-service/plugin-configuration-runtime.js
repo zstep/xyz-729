@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { createVolatile, isVolatile } from '@deepseek-ai/cosmokit'
 import { constants } from 'node:fs'
 import { lstat, open, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -163,7 +164,16 @@ function replaceReferences(value, bindingId, lease, depth = 0) {
   if (value === marker(bindingId, 'endpoint')) return `${lease.gatewayUrl}/v1`
   if (value === marker(bindingId, 'credential')) return lease.apiKey
   if (!value || typeof value !== 'object') return value
+  // Schemastery `volatile()` fields resolve to cosmokit references whose value
+  // is only reachable through `get()`. Rebuilding them as plain objects turns
+  // `channels` into `{}` and breaks plugin settings and volatile updates, so
+  // substitute inside the snapshot and hand back an equivalent reference.
+  if (isVolatile(value)) return createVolatile(replaceReferences(value.get(), bindingId, lease, depth + 1))
   if (Array.isArray(value)) return value.map(child => replaceReferences(child, bindingId, lease, depth + 1))
+  const prototype = Object.getPrototypeOf(value)
+  // Opaque instances (Schema, Credential, class-based values) must pass through
+  // untouched rather than losing their prototype to a plain object.
+  if (prototype !== Object.prototype && prototype !== null) return value
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, replaceReferences(child, bindingId, lease, depth + 1)]))
 }
 
@@ -250,10 +260,12 @@ export async function installPluginConfigurationRuntime(ctx) {
     const entry = fiber?.entry
     if (!entry || carrier(entry) || fiber?.parent?.fiber?.entry === entry) return next()
     const resolved = next()
-    // `next()` is the candidate configuration the loader is about to validate.
-    // `fiber.rawConfig` is its committed/normalized form, which may add schema
-    // defaults and therefore no longer match the approved binding digest.
-    return controller.resolve(entry.options.id, resolved, resolved)
+    // `next()` returns the candidate after the plugin's schema has normalized it
+    // (Schemastery adds defaults), so its digest no longer matches the authored
+    // entry configuration that the user approved. Use the entry's raw config for
+    // the approval check and substitute markers into the normalized candidate.
+    const approved = entry.options.config
+    return controller.resolve(entry.options.id, approved === undefined ? resolved : approved, resolved)
   }, { global: true, prepend: true })
   unhookUpdate = ctx.on('internal/update', function (config, noSave, next) {
     const entry = this?.entry

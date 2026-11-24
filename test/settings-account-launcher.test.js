@@ -40,7 +40,10 @@ describe('Desktop account UI composition', () => {
       expect(entries.find((entry) => entry.id === 'dsh-desktop-client-ui')?.name).toBe('dsh-desktop-client-ui')
       expect(entries.find((entry) => entry.id === 'dsh-desktop-workbenches')).toMatchObject({
         name: 'dsh-desktop-workbenches',
-        config: { root: { __jsExpr: "dshHomePath('desktop-workbenches')" } }
+        config: {
+          root: { __jsExpr: "dshHomePath('desktop-workbenches')" },
+          catalogUrl: 'https://market.dshdesktop.com/index.json'
+        }
       })
       expect(entries.find((entry) => entry.id === 'dsh-desktop-market-installer')?.name)
         .toBe('dsh-desktop-market-installer')

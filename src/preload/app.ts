@@ -12,6 +12,7 @@ import { setupDesktopStoragePersistence } from './desktop-storage'
 import { createSidebarBrowserBridge } from './sidebar-browser'
 import { usesDesktopCaption } from '../shared/desktop-menu'
 import { markDesktopPlatform } from './desktop-platform'
+import { mountMacosWindowChrome } from './macos-window-chrome'
 import { mountDesktopUpdateUi } from './desktop-update-ui'
 import { markWindowsTitlebar, mountWindowsTitlebarLayout } from './windows-titlebar'
 import { mountSafeModeFrame } from './safe-mode-frame'
@@ -40,6 +41,16 @@ if (webImportDocument) {
 
 if (appDocument) {
   markDesktopPlatform(document, process.platform)
+  if (process.platform === 'darwin') {
+    const disposeChrome = mountMacosWindowChrome(document, listener => {
+      const receive = (_event: IpcRendererEvent, value: unknown): void => {
+        if (typeof value === 'boolean') listener(value)
+      }
+      ipcRenderer.on(DESKTOP_IPC.windowFullscreen, receive)
+      return () => ipcRenderer.removeListener(DESKTOP_IPC.windowFullscreen, receive)
+    })
+    window.addEventListener('unload', disposeChrome, { once: true })
+  }
   setupDesktopStoragePersistence()
   // The custom-scheme preload runs before documentElement exists. Mounting the
   // update card at that moment throws and drops the rest of this bridge.
@@ -83,6 +94,8 @@ const desktopBridge: {
   }>
   getRepairDraft?: (sessionId: string) => Promise<{ text?: string; token?: string }>
   acknowledgeRepairDraft?: (sessionId: string, token: string) => Promise<{ ok: boolean }>
+  publishHtmlFile?: (path: string) => Promise<{ url: string; expires_at: number | null }>
+  publishHtmlUrl?: (url: string) => Promise<{ url: string; expires_at: number | null }>
   browser?: ReturnType<typeof createSidebarBrowserBridge>
   fileDrag?: {
     prepare: (source: DesktopFileSource, requestId: FileDragRequestId) => Promise<FileDragHandle | undefined>
@@ -160,6 +173,8 @@ if (appDocument) {
     }>
   desktopBridge.getRepairDraft = sessionId => ipcRenderer.invoke(DESKTOP_IPC.repairDraftGet, sessionId) as Promise<{ text?: string; token?: string }>
   desktopBridge.acknowledgeRepairDraft = (sessionId, token) => ipcRenderer.invoke(DESKTOP_IPC.repairDraftAck, sessionId, token) as Promise<{ ok: boolean }>
+  desktopBridge.publishHtmlFile = path => ipcRenderer.invoke(DESKTOP_IPC.publishHtml, path) as Promise<{ url: string; expires_at: number | null }>
+  desktopBridge.publishHtmlUrl = url => ipcRenderer.invoke(DESKTOP_IPC.publishHtml, url) as Promise<{ url: string; expires_at: number | null }>
 }
 if (appDocument && !isSafeModeRenderer(process.argv)) {
   desktopBridge.openMobilePairing = () => ipcRenderer.invoke(DESKTOP_IPC.mobileOpen) as Promise<void>

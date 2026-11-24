@@ -52,6 +52,25 @@ function request(gateway: PengbaoGateway, options: { method?: string; path?: str
 const chat = (body: unknown) => ({ method: 'POST', path: '/v1/chat/completions', body: JSON.stringify(body) })
 
 describe('Pengbao gateway', () => {
+  it('publishes bounded HTML through the authenticated account API', async () => {
+    const upstream = vi.fn((req: IncomingMessage, res: ServerResponse) => {
+      expect(req.url).toBe('/api/v1/published')
+      expect(req.headers.authorization).toBe('Bearer private-jwt')
+      let body = ''
+      req.on('data', chunk => { body += chunk })
+      req.on('end', () => { expect(JSON.parse(body)).toEqual({ html: '<!doctype html><title>Test</title>' }); res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ url: 'https://link.pengbao.ecombus.net/p/abcdef0123456789', expires_at: null })) })
+    })
+    const gateway = await gatewayFor(upstream)
+    await expect(gateway.publishHtml('<!doctype html><title>Test</title>')).resolves.toEqual({ url: 'https://link.pengbao.ecombus.net/p/abcdef0123456789', expires_at: null })
+    await expect(gateway.publishHtml('x'.repeat(5 * 1024 * 1024 + 1))).rejects.toThrow('Invalid HTML artifact')
+  })
+
+  it('does not publish empty HTML', async () => {
+    const gateway = await gatewayFor(() => { throw new Error('must not forward') })
+    await expect(gateway.publishHtml('')).rejects.toThrow('Invalid HTML artifact')
+  })
+
+
   it('mounts video routes with a separate revoked model-scoped lease', async () => {
     let submissions = 0
     const gateway = await gatewayFor((req, res) => {

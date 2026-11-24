@@ -33,7 +33,7 @@ it('retains fullscreen until the document root exists', () => {
   dispose()
 })
 
-it('opts this host into Web shortcuts without changing official desktop detection', async () => {
+it('paints the sidebar theme without opting this host into Web shortcuts', async () => {
   const { readFile } = await import('node:fs/promises')
   const source = await readFile('node_modules/@deepseek-ai/dsh-client-shortcuts/lib/client.js', 'utf8')
   const fn = source.match(/function detectEnvironment\(document, navigator\) \{[\s\S]*?\n\t\t\}/)?.[0]
@@ -43,8 +43,19 @@ it('opts this host into Web shortcuts without changing official desktop detectio
   doc.documentElement.dataset.platform = 'darwin'
   expect(detect(doc, { platform: 'MacIntel' })).toEqual({ runtime: 'desktop', platform: 'macos' })
   const dispose = mountMacosWindowChrome(doc, () => () => {})
-  expect(detect(doc, { platform: 'MacIntel' })).toEqual({ runtime: 'web', platform: 'macos' })
+  expect(detect(doc, { platform: 'MacIntel' })).toEqual({ runtime: 'desktop', platform: 'macos' })
+  const css = doc.querySelector('[data-dsh-macos-sidebar-theme]')?.textContent ?? ''
+  expect(css).toContain('[data-dsh-sidebar-root]')
+  expect(css).not.toContain('data-dsh-desktop-web-shortcuts')
+  expect(css).toContain('--dsw-specific-sidebar-fill')
   dispose()
+})
+
+it('mounts the macOS window chrome from the packaged preload entry', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const source = await readFile('src/preload/app.ts', 'utf8')
+  expect(source).toContain("from './macos-window-chrome'")
+  expect(source).toContain('mountMacosWindowChrome(document')
 })
 
 it('shares sidebar theme ownership across repeated mounts', () => {

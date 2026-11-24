@@ -260,6 +260,29 @@ window.__ModuleLoader__.load({
       }, [session.sessionId, inputActions])
       return null
     }
+    function PublishHtmlAction({ actionUrl, available }) {
+      const [busy, setBusy] = React.useState(false)
+      const [url, setUrl] = React.useState('')
+      const [error, setError] = React.useState('')
+      const label = document.documentElement.lang?.toLowerCase().startsWith('zh') ? '分享' : 'Share'
+      const done = document.documentElement.lang?.toLowerCase().startsWith('zh') ? '已复制链接' : 'Link copied'
+      if (!available || typeof window.dshDesktop?.publishHtmlUrl !== 'function') return null
+      return React.createElement('button', {
+        type: 'button', title: url || label, 'aria-label': label, disabled: busy,
+        onClick: () => {
+          setBusy(true); setError('')
+          void window.dshDesktop.publishHtmlUrl(actionUrl).then(result => {
+            setUrl(result.url)
+            return navigator.clipboard?.writeText(result.url)
+          }).catch(reason => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setBusy(false))
+        }
+      }, busy ? '…' : url ? done : label, error && React.createElement('span', { role: 'alert' }, error))
+    }
+
+    function PublishHtmlActionSlot(props) {
+      return React.createElement(PublishHtmlAction, props)
+    }
+
     function applyRepair(ctx) {
       ctx.effect(() => ctx.locale.register(REPAIR_NS, {
         zh: { open: '进入维修模式', description: '维修 Agent：协助排查和修复问题。点击进入修复模式，描述问题后发送。', opening: '正在打开维修…', failed: '无法打开维修会话，请重试', phone: '连接手机', phoneManage: '管理手机连接', phoneFailed: '无法读取手机连接状态' },
@@ -367,6 +390,13 @@ applyRepair(ctx)
             )
           })
         )
+      )
+      ctx.slots.inject('sidebar.right.tab.document.actions', () =>
+        ctx.slots.register({
+          name: 'sidebar.right.tab.document.actions',
+          id: 'desktop-publish-html',
+          inject: () => ({})
+        }, PublishHtmlActionSlot)
       )
       ctx.slots.inject('sidebar.right.tab.document.unpreviewable', () =>
         ctx.slots.register({
