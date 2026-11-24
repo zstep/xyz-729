@@ -250,7 +250,10 @@ export async function installPluginConfigurationRuntime(ctx) {
     const entry = fiber?.entry
     if (!entry || carrier(entry) || fiber?.parent?.fiber?.entry === entry) return next()
     const resolved = next()
-    return controller.resolve(entry.options.id, fiber.rawConfig ?? resolved, resolved)
+    // `next()` is the candidate configuration the loader is about to validate.
+    // `fiber.rawConfig` is its committed/normalized form, which may add schema
+    // defaults and therefore no longer match the approved binding digest.
+    return controller.resolve(entry.options.id, resolved, resolved)
   }, { global: true, prepend: true })
   unhookUpdate = ctx.on('internal/update', function (config, noSave, next) {
     const entry = this?.entry
