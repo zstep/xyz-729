@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "0.13.2+pengbao.11",
+  "version": "0.13.2+pengbao.12",
   "description": "Pengbao AI desktop assistant.",
   "private": true,
   "type": "module",

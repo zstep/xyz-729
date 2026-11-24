@@ -38,7 +38,7 @@ test('protects runtime references from Loader persistence', async () => {
     effect() {},
     logger: { warn() {} }
   }
-  const fiber = { entry, parent: { fiber: { entry: {} } } }
+  const fiber = { entry, parent: { fiber: { entry: {} } }, rawConfig: raw }
   let runtime
   try {
     runtime = await installPluginConfigurationRuntime(ctx)
@@ -48,9 +48,9 @@ test('protects runtime references from Loader persistence', async () => {
     assert.ok(configHook)
     assert.ok(updateHook)
     // Cordis global carriers may invoke these hooks with a null context.
-    assert.equal(configHook.call(null, raw, () => 'next'), 'next')
+    assert.equal(configHook.call(null, null, () => 'next'), 'next')
     assert.equal(updateHook.call(null, {}, false, () => 'next'), 'next')
-    const resolved = configHook.call(fiber, raw, () => raw)
+    const resolved = configHook.call(fiber, fiber, () => raw)
     assert.deepEqual(resolved, { endpoint: `${gatewayUrl}/v1`, credential: leaseToken, model: 'chat-model' })
     let forwarded
     const patches = { path: 'profile/cordis.patch.yml', patches: [{ id: 'fixture-plugin', config: raw }] }
@@ -98,7 +98,7 @@ test('resolve tolerates plugins without a raw configuration', async () => {
     effect() {},
     logger: { warn() {} }
   }
-  const fiber = { entry, parent: { fiber: { entry: {} } } }
+  const fiber = { entry, parent: { fiber: { entry: {} } }, rawConfig: raw }
   let runtime
   try {
     runtime = await installPluginConfigurationRuntime(ctx)
@@ -106,10 +106,12 @@ test('resolve tolerates plugins without a raw configuration', async () => {
     const configHook = listeners.get('internal/config')
     assert.ok(configHook)
     // Plugins without a config file invoke the hook with raw === undefined.
-    const unrelated = configHook.call({ ...fiber, entry: { options: { id: 'other-plugin' } } }, undefined, () => 'default-resolved')
+    const otherFiber = { ...fiber, entry: { options: { id: 'other-plugin' } }, rawConfig: {} }
+    const unrelated = configHook.call(otherFiber, otherFiber, () => 'default-resolved')
     assert.equal(unrelated, 'default-resolved')
     // A bound entry whose raw configuration disappeared falls back to defaults.
-    const stale = configHook.call(fiber, undefined, () => 'default-resolved')
+    const staleFiber = { ...fiber, rawConfig: undefined }
+    const stale = configHook.call(staleFiber, staleFiber, () => 'default-resolved')
     assert.equal(stale, 'default-resolved')
   } finally {
     await runtime?.dispose()
