@@ -25,6 +25,22 @@ describe('workbench download transport', () => {
     expect(fallback).not.toHaveBeenCalled()
   })
 
+  it('falls back to Node fetch only when the utility transport fails before headers', async () => {
+    const response = new Response('ok', { status: 200 })
+    const net = { fetch: vi.fn(async () => { throw new TypeError('fetch failed') }) }
+    const fallback = vi.fn(async () => response)
+    vi.stubGlobal('fetch', fallback)
+    const fetchImpl = selectMarketFetch({ runtime: { versions: { electron: '43.0.0' }, type: 'utility' }, loadElectron: () => ({ net }) })
+    expect(await fetchImpl('https://market.example/index.json', {})).toBe(response)
+    expect(fallback).toHaveBeenCalledOnce()
+
+    const controller = new AbortController()
+    controller.abort()
+    net.fetch.mockImplementation(async () => { throw new DOMException('aborted', 'AbortError') })
+    await expect(fetchImpl('https://market.example/index.json', { signal: controller.signal })).rejects.toThrow('aborted')
+    expect(fallback).toHaveBeenCalledOnce()
+  })
+
   it('keeps Node fetch and never loads the electron npm launcher outside a utility process', () => {
     const loadElectron = vi.fn()
     expect(selectMarketFetch({ runtime: { versions: {} }, loadElectron })).toBe(globalThis.fetch)

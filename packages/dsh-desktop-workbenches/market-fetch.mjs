@@ -14,7 +14,16 @@ export function selectMarketFetch({ runtime = process, loadElectron = () => requ
   if (runtime.versions?.electron && runtime.type === 'utility') {
     const { net } = loadElectron()
     if (typeof net?.fetch !== 'function') throw new Error('Electron utility network transport is unavailable.')
-    return net.fetch.bind(net)
+    const utilityFetch = net.fetch.bind(net)
+    // The utility transport honors the system proxy but can fail before headers
+    // in environments where that proxy is unavailable. Keep the caller's abort
+    // signal authoritative and retry only an un-aborted transport failure.
+    return async (url, options) => {
+      try { return await utilityFetch(url, options) } catch (error) {
+        if (options?.signal?.aborted) throw error
+        return globalThis.fetch(url, options)
+      }
+    }
   }
   return globalThis.fetch
 }
