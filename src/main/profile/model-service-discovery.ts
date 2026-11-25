@@ -50,7 +50,7 @@ interface StaticSource {
 }
 
 const ADAPTERS = new Map<string, { version: string; adapter: ReviewedAdapter; capabilities: ModelServiceCapability[] }>([
-  ['@deepseek-ai/dsh-llm-pi-ai', { version: '0.2.2-alpha.2', adapter: 'llm-pi-ai', capabilities: ['chat.completions'] }],
+  ['@deepseek-ai/dsh-llm-pi-ai', { version: '0.2.2-rc.1', adapter: 'llm-pi-ai', capabilities: ['chat.completions'] }],
   ['dsh-desktop-imagegen', { version: '0.1.0', adapter: 'desktop-imagegen', capabilities: ['chat.completions', 'image.generate'] }],
   ['dsh-image-generation', { version: '0.1.0', adapter: 'image-generation', capabilities: ['image.generate'] }]
 ])

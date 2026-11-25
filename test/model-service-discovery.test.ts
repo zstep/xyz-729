@@ -104,14 +104,14 @@ describe('static model consumer discovery follows Harness composition', () => {
   it('requires the exact installation-owned reviewed adapter version', async () => {
     const f = await fixture()
     const id = '@deepseek-ai/dsh-llm-pi-ai'
-    await f.pkg(id, { host: true, version: '0.2.2-alpha.2' })
+    await f.pkg(id, { host: true, version: '0.2.2-rc.1' })
     await f.pkg('fixture-bundle', { patch: `- insert:\n    - id: llm-pi-ai\n      name: '${id}'\n` })
     await f.manifest(['fixture-bundle'])
     expect((await f.discover()).find(c => c.id === id)).toMatchObject({ status: 'declared', adapter: 'llm-pi-ai' })
     await f.pkg(id, { host: true, version: '0.2.1-rc.4' })
     expect((await f.discover()).find(c => c.id === id)).toMatchObject({ status: 'needs-adapter', capabilities: [] })
     await rm(join(f.host, 'node_modules', id), { recursive: true })
-    await f.pkg(id, { version: '0.2.2-alpha.2' })
+    await f.pkg(id, { version: '0.2.2-rc.1' })
     expect((await f.discover()).find(c => c.id === id)).toMatchObject({ status: 'needs-adapter', capabilities: [] })
   })
 
