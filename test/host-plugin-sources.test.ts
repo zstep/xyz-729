@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { hostInsertedPluginNames, prepareHostPluginSourcesPatch } from '../src/main/profile/host-plugin-sources'
+import { hostInsertedPluginNames, prepareHostPluginSourcesPatch, repairDesktopImagegenSource } from '../src/main/profile/host-plugin-sources'
 import { setHostPluginEnabled } from '../src/main/profile/host-plugin-state'
 
 const directories: string[] = []
@@ -120,5 +120,31 @@ describe('Desktop host plugin sources', () => {
     expect(outputPath).not.toBe(patchPath)
     expect(parse(await readFile(outputPath, 'utf8'))).toEqual([])
     expect(await readFile(patchPath, 'utf8')).toContain('dsh-image-generation')
+  })
+
+  it('rewrites a stale built-in image panel source to this installation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-imagegen-source-'))
+    directories.push(root)
+    const patchPath = join(root, 'profiles', 'desktop', 'cordis.patch.yml')
+    await mkdir(join(root, 'profiles', 'desktop'), { recursive: true })
+    const stale = 'file:///Applications/Old%20Pengbao.app/Contents/Resources/app.asar/node_modules/dsh-desktop-imagegen/index.js'
+    await writeFile(patchPath, `- id: imagegen\n  name: ${stale}\n  config:\n    desktopImageModelId: \"\"\n- id: other\n  name: keep-me\n`)
+    await repairDesktopImagegenSource(root, 'desktop', join(process.cwd(), 'package.json'))
+    const output = await readFile(patchPath, 'utf8')
+    const current = pathToFileURL(createRequire(join(process.cwd(), 'package.json')).resolve('dsh-desktop-imagegen')).href
+    expect(output).toContain(current)
+    expect(output).not.toContain(stale)
+    expect(output).toContain('name: keep-me')
+  })
+
+  it('leaves a profile without the built-in image row untouched', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-imagegen-source-'))
+    directories.push(root)
+    const patchPath = join(root, 'profiles', 'desktop', 'cordis.patch.yml')
+    await mkdir(join(root, 'profiles', 'desktop'), { recursive: true })
+    await writeFile(patchPath, '- id: other\n  name: keep-me\n')
+    const before = await readFile(patchPath, 'utf8')
+    await repairDesktopImagegenSource(root, 'desktop', join(process.cwd(), 'package.json'))
+    expect(await readFile(patchPath, 'utf8')).toBe(before)
   })
 })

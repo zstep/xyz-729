@@ -67,6 +67,36 @@ export function withoutDisabledHostInsertions(source: string, disabled: readonly
   return changed ? String(document) : source
 }
 
+const DESKTOP_IMAGEGEN_SOURCE = /file:\/\/[^"'\s]*node_modules\/dsh-desktop-imagegen\/index\.js/g
+
+/**
+* The built-in image panel row records its install URL when the assistant
+* writes it. After an app move or upgrade that URL is stale and the row is
+* skipped, which removes the Pengbao model foundation UI. Rewrite only that
+* row's source to this installation, leaving every other patch byte intact.
+*/
+export async function repairDesktopImagegenSource(dshHome: string, profile: string, hostModuleAnchor: string): Promise<void> {
+  const path = join(dshHome, 'profiles', profile, 'cordis.patch.yml')
+  let source: string
+  try {
+    source = await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  if (!source.includes('dsh-desktop-imagegen/index.js')) return
+  const current = pathToFileURL(createRequire(hostModuleAnchor).resolve('dsh-desktop-imagegen')).href
+  const next = source.replace(DESKTOP_IMAGEGEN_SOURCE, current)
+  if (next === source) return
+  const temporary = `${path}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, next, 'utf8')
+    await rename(temporary, path)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+}
+
 /** Resolve Desktop insertions from this installation, even when a Profile
  * contains a market package with the same name. Loader overrides cannot
  * change a row's source after insertion; the client graph uses this URL too.

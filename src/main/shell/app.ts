@@ -23,6 +23,7 @@ import { discoverModelServiceConsumers, type ModelServiceConsumer } from '../pro
 import { prepareHostDisabledPluginsPatch } from '../profile/host-disabled-plugins'
 import { ensurePluginMarketDefaults } from '../profile/plugin-market-defaults'
 import { resolveHostPluginState } from '../profile/host-plugin-selection'
+import { repairDesktopImagegenSource } from '../profile/host-plugin-sources'
 import {
   BUILTIN_IMAGEGEN,
   BUILTIN_IMAGE_GENERATION,
@@ -937,6 +938,13 @@ async function main(): Promise<void> {
   if (!safeMode) await prepareGenerationsForLaunch(dshHome, line => { console.error(line) }, 'desktop')
   flushOnClose = () => { desktopStorage.flushSync() }
   const runtimeDir = app.getAppPath()
+  if (!safeMode) {
+    try {
+      await repairDesktopImagegenSource(dshHome, 'desktop', join(runtimeDir, 'package.json'))
+    } catch (error) {
+      console.warn('[desktop] built-in image panel source repair skipped', error)
+    }
+  }
   const hostEntry = fileURLToPath(new URL('./host.js', import.meta.url))
   const frontend = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist')
   attachDesktopStorage(ipcMain, desktopStorage, () => mainWindow?.webContents)
