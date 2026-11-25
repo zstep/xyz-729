@@ -260,18 +260,18 @@ window.__ModuleLoader__.load({
       }, [session.sessionId, inputActions])
       return null
     }
-    function PublishHtmlAction({ actionUrl, available }) {
+    function PublishHtmlAction({ absolutePath }) {
       const [busy, setBusy] = React.useState(false)
       const [url, setUrl] = React.useState('')
       const [error, setError] = React.useState('')
       const label = document.documentElement.lang?.toLowerCase().startsWith('zh') ? '分享' : 'Share'
       const done = document.documentElement.lang?.toLowerCase().startsWith('zh') ? '已复制链接' : 'Link copied'
-      if (!available || typeof window.dshDesktop?.publishHtmlUrl !== 'function') return null
+      if (!absolutePath || !/\.html?$/i.test(absolutePath) || typeof window.dshDesktop?.publishHtmlFile !== 'function') return null
       return React.createElement('button', {
         type: 'button', title: url || label, 'aria-label': label, disabled: busy,
         onClick: () => {
           setBusy(true); setError('')
-          void window.dshDesktop.publishHtmlUrl(actionUrl).then(result => {
+          void window.dshDesktop.publishHtmlFile(absolutePath).then(result => {
             setUrl(result.url)
             return navigator.clipboard?.writeText(result.url)
           }).catch(reason => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setBusy(false))
@@ -281,6 +281,33 @@ window.__ModuleLoader__.load({
 
     function PublishHtmlActionSlot(props) {
       return React.createElement(PublishHtmlAction, props)
+    }
+
+    function installShareFileMenu(ctx) {
+      if (typeof ctx.inject !== 'function') return
+      ctx.inject(['contextMenus', 'remote', 'remote.workspaceFiles'], child => {
+        const zh = () => document.documentElement.lang?.toLowerCase().startsWith('zh')
+        child.effect(() => child.contextMenus.register({
+          id: 'desktop-share-html', target: 'file', order: 150,
+          resolve: target => {
+            const { sessionId, path } = target ?? {}
+            if (typeof path !== 'string' || !/\.html?$/i.test(path)) return []
+            if (typeof window.dshDesktop?.publishHtmlText !== 'function') return []
+            return [{
+              id: 'shareHtml',
+              label: zh() ? '分享为公开链接' : 'Share as public link',
+              failureLabel: zh() ? '分享失败' : 'Sharing failed',
+              run: async () => {
+                const result = await child.remote.workspaceFiles.readBytes(sessionId, path, {})
+                if (!result.ok) throw new Error('Could not read the HTML file')
+                const published = await window.dshDesktop.publishHtmlText(new TextDecoder().decode(new Uint8Array(result.value.data)))
+                await navigator.clipboard?.writeText(published.url)
+                child.contextMenus.notify(zh() ? '公开链接已复制' : 'Public link copied', true)
+              }
+            }]
+          }
+        }), 'desktop: share HTML file')
+      })
     }
 
     function applyRepair(ctx) {
@@ -303,6 +330,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
 applyRepair(ctx)
       ctx.effect(() => ctx.locale.register(ACTIONS_NS, actionMessages))
+      installShareFileMenu(ctx)
       const actionText = ctx.locale.bind(ACTIONS_NS)
       ctx.effect(() => {
         const id = 'dsh-desktop-preset-toolbar-style'
@@ -395,13 +423,6 @@ applyRepair(ctx)
         ctx.slots.register({
           name: 'sidebar.right.tab.document.actions',
           id: 'desktop-publish-html-preview',
-          inject: () => ({})
-        }, PublishHtmlActionSlot)
-      )
-      ctx.slots.inject('deliverables.file.actions', () =>
-        ctx.slots.register({
-          name: 'deliverables.file.actions',
-          id: 'desktop-publish-html-deliverable',
           inject: () => ({})
         }, PublishHtmlActionSlot)
       )

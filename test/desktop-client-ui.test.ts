@@ -96,7 +96,6 @@ describe('DSH Desktop client slot occupants', () => {
       'sidebar.brand.name',
       'conversation.hero.brand.mark',
       'sidebar.right.tab.document.actions',
-      'deliverables.file.actions',
       'sidebar.right.tab.document.unpreviewable',
       'sidebar.workspaces.session.menu.item',
       'sidebar.workspaces.session.menu.item',

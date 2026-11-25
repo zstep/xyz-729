@@ -95,7 +95,7 @@ const desktopBridge: {
   getRepairDraft?: (sessionId: string) => Promise<{ text?: string; token?: string }>
   acknowledgeRepairDraft?: (sessionId: string, token: string) => Promise<{ ok: boolean }>
   publishHtmlFile?: (path: string) => Promise<{ url: string; expires_at: number | null }>
-  publishHtmlUrl?: (url: string) => Promise<{ url: string; expires_at: number | null }>
+  publishHtmlText?: (html: string) => Promise<{ url: string; expires_at: number | null }>
   browser?: ReturnType<typeof createSidebarBrowserBridge>
   fileDrag?: {
     prepare: (source: DesktopFileSource, requestId: FileDragRequestId) => Promise<FileDragHandle | undefined>
@@ -174,7 +174,7 @@ if (appDocument) {
   desktopBridge.getRepairDraft = sessionId => ipcRenderer.invoke(DESKTOP_IPC.repairDraftGet, sessionId) as Promise<{ text?: string; token?: string }>
   desktopBridge.acknowledgeRepairDraft = (sessionId, token) => ipcRenderer.invoke(DESKTOP_IPC.repairDraftAck, sessionId, token) as Promise<{ ok: boolean }>
   desktopBridge.publishHtmlFile = path => ipcRenderer.invoke(DESKTOP_IPC.publishHtml, path) as Promise<{ url: string; expires_at: number | null }>
-  desktopBridge.publishHtmlUrl = url => ipcRenderer.invoke(DESKTOP_IPC.publishHtml, url) as Promise<{ url: string; expires_at: number | null }>
+  desktopBridge.publishHtmlText = html => ipcRenderer.invoke(DESKTOP_IPC.publishHtml, html) as Promise<{ url: string; expires_at: number | null }>
 }
 if (appDocument && !isSafeModeRenderer(process.argv)) {
   desktopBridge.openMobilePairing = () => ipcRenderer.invoke(DESKTOP_IPC.mobileOpen) as Promise<void>

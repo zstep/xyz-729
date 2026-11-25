@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, safeStorage, session, shell, Tray, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron'
 import { desktopVersion } from '../../shared/desktop-version'
@@ -1458,23 +1458,13 @@ async function main(): Promise<void> {
     const gateway = accountGateway
     if (gateway === undefined) throw new Error('Pengbao account is not ready')
     if (typeof value !== 'string' || value.length === 0 || value.length > 5 * 1024 * 1024) throw new Error('Invalid HTML artifact')
-    if (value.startsWith('/api/') && value.includes('sessionId=') && value.includes('seq=') && value.includes('index=')) {
-      const hostOrigin = loopbackHarnessOrigin(hostUrl())
-      if (hostOrigin === undefined) throw new Error('Harness is not ready')
-      const cookie = hostSessionCookie(hostCookie())
-      const response = await fetch(`${hostOrigin}${value}`, { headers: { ...(cookie ? { Cookie: cookie } : {}) } })
-      if (!response.ok) throw new Error('Could not read HTML artifact')
-      const html = await response.text()
-      return gateway.publishHtml(html)
-    }
     if (value.trimStart().startsWith('<')) return gateway.publishHtml(value)
     if (value.length > 4096) throw new Error('Invalid HTML artifact path')
-    const root = accountHome()
     const absolute = resolve(value)
-    if (absolute !== root && !absolute.startsWith(`${root}${sep}`)) throw new Error('HTML artifact is outside the account workspace')
     if (!/\.html?$/i.test(absolute)) throw new Error('Only HTML artifacts can be published')
+    const stat = await lstat(absolute)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 5 * 1024 * 1024) throw new Error('HTML artifact is too large')
     const html = await readFile(absolute, { encoding: 'utf8' })
-    if (Buffer.byteLength(html, 'utf8') > 5 * 1024 * 1024) throw new Error('HTML artifact is too large')
     return gateway.publishHtml(html)
   })
   ipcMain.handle(DESKTOP_IPC.boot, async event => {
