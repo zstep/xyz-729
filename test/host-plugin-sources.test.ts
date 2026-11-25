@@ -137,12 +137,27 @@ describe('Desktop host plugin sources', () => {
     expect(output).toContain('name: keep-me')
   })
 
-  it('leaves a profile without the built-in image row untouched', async () => {
+  it('restores the built-in image row when the profile lost it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-imagegen-source-'))
     directories.push(root)
     const patchPath = join(root, 'profiles', 'desktop', 'cordis.patch.yml')
     await mkdir(join(root, 'profiles', 'desktop'), { recursive: true })
     await writeFile(patchPath, '- id: other\n  name: keep-me\n')
+    const current = pathToFileURL(createRequire(join(process.cwd(), 'package.json')).resolve('dsh-desktop-imagegen')).href
+    await repairDesktopImagegenSource(root, 'desktop', join(process.cwd(), 'package.json'))
+    const output = await readFile(patchPath, 'utf8')
+    expect(output).toContain('name: keep-me')
+    expect(output).toContain('id: imagegen')
+    expect(output).toContain(current)
+  })
+
+  it('leaves an explicitly disabled built-in image row out', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-imagegen-source-'))
+    directories.push(root)
+    const patchPath = join(root, 'profiles', 'desktop', 'cordis.patch.yml')
+    await mkdir(join(root, 'profiles', 'desktop'), { recursive: true })
+    await writeFile(patchPath, '- id: other\n  name: keep-me\n')
+    await setHostPluginEnabled(root, 'dsh-desktop-imagegen', false)
     const before = await readFile(patchPath, 'utf8')
     await repairDesktopImagegenSource(root, 'desktop', join(process.cwd(), 'package.json'))
     expect(await readFile(patchPath, 'utf8')).toBe(before)

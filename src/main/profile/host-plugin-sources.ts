@@ -84,9 +84,17 @@ export async function repairDesktopImagegenSource(dshHome: string, profile: stri
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
     throw error
   }
-  if (!source.includes('dsh-desktop-imagegen/index.js')) return
   const current = pathToFileURL(createRequire(hostModuleAnchor).resolve('dsh-desktop-imagegen')).href
-  const next = source.replace(DESKTOP_IMAGEGEN_SOURCE, current)
+  let next = source.includes('dsh-desktop-imagegen/index.js') ? source.replace(DESKTOP_IMAGEGEN_SOURCE, current) : ''
+  if (next === '') {
+    // Removing that row (or writing a Profile from an older template) silently
+    // drops the model-foundation settings page. Restore it unless the user
+    // explicitly disabled the built-in image plugin.
+    const disabled = await readEffectiveDisabledHostPlugins(dshHome)
+    if (disabled.includes('dsh-desktop-imagegen')) return
+    const separator = source.length === 0 || source.endsWith('\n') ? '' : '\n'
+    next = `${source}${separator}- id: imagegen\n  name: ${current}\n`
+  }
   if (next === source) return
   const temporary = `${path}.${randomUUID()}.tmp`
   try {
