@@ -106,6 +106,18 @@ test('server chat defaults are exposed as validated IDs for boot-time selection'
   service.dispose()
 })
 
+test('resolves a server chat default that names the display alias', async () => {
+  const service = createModelService({
+    llm: { stream: () => (async function* () {})() },
+    transport: {
+      models: async () => [{ id: 'chat-model-1017', name: 'chat-model', capabilities: ['chat.completions'] }],
+      defaults: async () => ({ defaultModels: ['chat-model'] })
+    }, getBindings: () => ({}) })
+  const catalog = await service.catalog()
+  assert.equal(catalog.defaults['chat.completions'], 'chat-model-1017')
+  service.dispose()
+})
+
 test('chat defaults degrade to an empty list instead of failing startup', async () => {
   const offline = createModelService({ transport: {
     models: async () => [], defaults: async () => { throw new Error('offline') }

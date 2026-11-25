@@ -105,7 +105,10 @@ export function createModelService({ llm, getBindings = () => ({}), signal, tran
     if (defaults === undefined) return { models }
     if (!record(defaults) || !Array.isArray(defaults.defaultModels) || defaults.defaultModels.length > 256
       || defaults.defaultModels.some(id => !identifier(id))) fail('INVALID_RESPONSE')
-    return { models, defaultModel: defaults.defaultModels.find(id => models.some(model => model.id === id)) }
+    // Server defaults may name the display alias while the catalog id is versioned;
+    // expose the matched catalog id so a selection stays routable.
+    const defaultMatch = defaults.defaultModels.map(id => models.find(model => model.id === id || model.name === id)).find(Boolean)
+    return { models, ...(defaultMatch === undefined ? {} : { defaultModel: defaultMatch.id }) }
   }
   /** Server-declared chat defaults as validated IDs. Never a catalog-order fallback. */
   async function chatDefaults(options = {}) {
