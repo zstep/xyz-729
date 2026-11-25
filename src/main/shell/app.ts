@@ -23,7 +23,7 @@ import { discoverModelServiceConsumers, type ModelServiceConsumer } from '../pro
 import { prepareHostDisabledPluginsPatch } from '../profile/host-disabled-plugins'
 import { ensurePluginMarketDefaults } from '../profile/plugin-market-defaults'
 import { resolveHostPluginState } from '../profile/host-plugin-selection'
-import { repairDesktopImagegenSource } from '../profile/host-plugin-sources'
+import { prepareHostPluginSourcesPatch, repairDesktopImagegenSource } from '../profile/host-plugin-sources'
 import {
   BUILTIN_IMAGEGEN,
   BUILTIN_IMAGE_GENERATION,
@@ -945,6 +945,10 @@ async function main(): Promise<void> {
       console.warn('[desktop] built-in image panel source repair skipped', error)
     }
   }
+  // Desktop-owned plugin rows must resolve from this installation. Bare package
+  // names resolve against the Profile's node_modules, which does not own these
+  // packages, so the server and client halves silently fail to mount.
+  const desktopHostPatch = await prepareHostPluginSourcesPatch(dshHome, productPatch, join(runtimeDir, 'package.json'))
   const hostEntry = fileURLToPath(new URL('./host.js', import.meta.url))
   const frontend = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist')
   attachDesktopStorage(ipcMain, desktopStorage, () => mainWindow?.webContents)
@@ -1148,7 +1152,7 @@ async function main(): Promise<void> {
       environment: {
         ...hostEnvironment,
         DSH_CLIENT_VERSION: app.getVersion(),
-        DSH_DESKTOP_PATCH_FILE: productPatch,
+        DSH_DESKTOP_PATCH_FILE: desktopHostPatch,
         ...(additionalPatchFiles.length === 0 ? {} : {
           DSH_DESKTOP_ADDITIONAL_PATCH_FILES: JSON.stringify(additionalPatchFiles)
         }),
@@ -1157,7 +1161,7 @@ async function main(): Promise<void> {
       primaryRuntime,
       privateHandoff: () => providerPatchPath === undefined
         ? undefined
-        : buildPrivateHandoff(hostProfile, productPatch, additionalPatchFiles),
+        : buildPrivateHandoff(hostProfile, desktopHostPatch, additionalPatchFiles),
       onFailure,
       onPluginOperation: record => { operationJournal.enqueue(JSON.stringify(record)) }
     })
