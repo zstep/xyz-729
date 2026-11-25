@@ -38,6 +38,7 @@ describe('Desktop account UI composition', () => {
       expect(entries.find((entry) => entry.id === 'product-analytics')?.disabled).toBe(true)
       expect(entries.find((entry) => entry.id === 'ui-brand-official')?.disabled).toBe(true)
       expect(entries.find((entry) => entry.id === 'dsh-desktop-client-ui')?.name).toBe('dsh-desktop-client-ui')
+      expect(entries.find((entry) => entry.id === 'dsh-desktop-model-service')?.name).toBe('dsh-desktop-model-service')
       expect(entries.find((entry) => entry.id === 'dsh-desktop-workbenches')).toMatchObject({
         name: 'dsh-desktop-workbenches',
         config: {

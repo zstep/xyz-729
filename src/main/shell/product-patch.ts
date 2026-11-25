@@ -33,6 +33,8 @@ const DESKTOP_PRODUCT_PATCH_BASE = `- id: desktop-product-telemetry
 - insert:
     - id: dsh-desktop-client-ui
       name: dsh-desktop-client-ui
+    - id: dsh-desktop-model-service
+      name: dsh-desktop-model-service
 `
 
 const DESKTOP_ENTERPRISE_ROW = `    - id: dsh-desktop-enterprise
