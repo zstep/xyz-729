@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
 
     const React = require('react')
-    const { MenuItemButton, Tooltip } = require('@deepseek-ai/dsh-client-ui-primitives')
+    const { MenuItemButton, Tooltip, IconShareOutlineRegular, IconCheckOutlineRegular } = require('@deepseek-ai/dsh-client-ui-primitives')
 
     const DESKTOP_MARK_URL = 'dsh-desktop://desktop/pengbao-b2-mark.png'
 
@@ -264,19 +264,28 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = React.useState(false)
       const [url, setUrl] = React.useState('')
       const [error, setError] = React.useState('')
-      const label = document.documentElement.lang?.toLowerCase().startsWith('zh') ? '分享' : 'Share'
-      const done = document.documentElement.lang?.toLowerCase().startsWith('zh') ? '已复制链接' : 'Link copied'
+      const zh = document.documentElement.lang?.toLowerCase().startsWith('zh')
+      const label = zh ? '分享' : 'Share'
+      const done = zh ? '已复制链接' : 'Link copied'
       if (!absolutePath || !/\.html?$/i.test(absolutePath) || typeof window.dshDesktop?.publishHtmlFile !== 'function') return null
-      return React.createElement('button', {
-        type: 'button', title: url || label, 'aria-label': label, disabled: busy,
-        onClick: () => {
-          setBusy(true); setError('')
-          void window.dshDesktop.publishHtmlFile(absolutePath).then(result => {
-            setUrl(result.url)
-            return navigator.clipboard?.writeText(result.url)
-          }).catch(reason => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setBusy(false))
-        }
-      }, busy ? '…' : url ? done : label, error && React.createElement('span', { role: 'alert' }, error))
+      return React.createElement(React.Fragment, null,
+        React.createElement('button', {
+          type: 'button',
+          className: 'dshDesktopShareHtml',
+          title: url ? done : label,
+          'aria-label': url ? done : label,
+          disabled: busy,
+          onClick: () => {
+            setBusy(true); setError('')
+            void window.dshDesktop.publishHtmlFile(absolutePath).then(result => {
+              setUrl(result.url)
+              return navigator.clipboard?.writeText(result.url)
+            }).catch(reason => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setBusy(false))
+          }
+        }, url
+          ? React.createElement(IconCheckOutlineRegular, {})
+          : React.createElement(IconShareOutlineRegular, {})),
+        error && React.createElement('span', { role: 'alert', className: 'dshDesktopShareError' }, error))
     }
 
     function PublishHtmlActionSlot(props) {
@@ -399,7 +408,18 @@ applyRepair(ctx)
             padding:0 12px; font:inherit; font-size:13px;
           }
           [data-dsh-preset-search] input[type=search]::placeholder { color:var(--dsw-alias-label-caption); }
-          [data-dsh-preset-search] input[type=search]:focus-visible {
+                    .dshDesktopShareHtml {
+            appearance:none; -webkit-appearance:none; box-sizing:border-box;
+            display:inline-flex; align-items:center; justify-content:center; flex:none;
+            width:28px; height:28px; padding:0; border:0; border-radius:6px;
+            background:transparent; color:var(--dsw-alias-label-secondary); cursor:pointer; font:inherit;
+          }
+          .dshDesktopShareHtml:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+          .dshDesktopShareHtml:disabled { opacity:.5; cursor:wait; }
+          .dshDesktopShareHtml:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary); outline-offset:2px; }
+          .dshDesktopShareHtml svg { width:16px; height:16px; }
+          .dshDesktopShareError { position:absolute; right:0; top:100%; max-width:280px; padding:6px 10px; border-radius:8px; background:var(--dsw-alias-toast-bg); color:var(--dsw-alias-toast-label); font-size:12px; z-index:5; }
+[data-dsh-preset-search] input[type=search]:focus-visible {
             outline:2px solid var(--dsw-alias-state-business-primary); outline-offset:2px;
             background:var(--dsw-alias-bg-base);
           }
