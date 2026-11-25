@@ -4,7 +4,7 @@ import { PENGBAO_PRODUCT } from './config'
 
 export interface NativeVideoLease { capabilityToken: string; revoke(): void }
 export interface NativeVideoScope { capabilityToken?: string; models: readonly string[] }
-export type VideoCatalogRow = { id: string; name: string; provider: string; protocol: string }
+export type VideoCatalogRow = { id: string; name: string; provider: string; protocol: string; default?: boolean }
 const MAX_BODY = 16 * 1024 * 1024
 const MAX_JSON = 256 * 1024
 const MAX_VIDEO = 512 * 1024 * 1024
@@ -76,10 +76,12 @@ export function createNativeVideoGateway(options: { getJwt(): string; fetch: typ
   const models = async (signal: AbortSignal): Promise<VideoCatalogRow[]> => {
     const payload = await json('/api/v1/videos/proxy/models', signal)
     if (!Array.isArray(payload?.data) || payload.data.length > 512) throw new VideoFailure(502, 'VIDEO_RESPONSE')
-    return payload.data.map((row: any) => {
+    const rows: VideoCatalogRow[] = payload.data.map((row: any) => {
       if (!MODEL(row?.id) || !MODEL(row?.name) || !['volcengine', 'alibaba', 'openai'].includes(row?.provider) || !['ark', 'dashscope', 'openai', 'newapi'].includes(row?.protocol)) throw new VideoFailure(502, 'VIDEO_RESPONSE')
-      return { id: row.id, name: row.name, provider: row.provider, protocol: row.protocol }
+      return { id: row.id as string, name: row.name as string, provider: row.provider as string, protocol: row.protocol as string }
     })
+    const selected = MODEL(payload.default_model) && rows.some(row => row.id === payload.default_model) ? payload.default_model : ''
+    return rows.map((row: VideoCatalogRow) => selected !== '' && row.id === selected ? { ...row, default: true } : row)
   }
   return {
     createLease(scope: NativeVideoScope): NativeVideoLease {

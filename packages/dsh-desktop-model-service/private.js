@@ -75,8 +75,9 @@ export function createPluginConfigurationBroker({ fetch: fetchImpl = globalThis.
       const result = await post('/v1/plugin-configuration/video-models', undefined, signal)
       if (!record(result) || !Array.isArray(result.data) || result.data.length > 256) fail('INVALID_RESPONSE')
       return freeze(result.data.map(row => {
-        if (!record(row) || !identifier(row.id) || !identifier(row.name) || !['volcengine', 'alibaba', 'openai'].includes(row.provider) || !['ark', 'dashscope', 'openai', 'newapi'].includes(row.protocol)) fail('INVALID_RESPONSE')
-        return { id: row.id, name: row.name, provider: row.provider, protocol: row.protocol }
+        if (!record(row) || !identifier(row.id) || !identifier(row.name) || !['volcengine', 'alibaba', 'openai'].includes(row.provider) || !['ark', 'dashscope', 'openai', 'newapi'].includes(row.protocol)
+          || (row.default !== undefined && row.default !== true)) fail('INVALID_RESPONSE')
+        return { id: row.id, name: row.name, provider: row.provider, protocol: row.protocol, ...(row.default === true ? { default: true } : {}) }
       }))
     },
     async issue(policy, { signal } = {}) {

@@ -147,9 +147,11 @@ export function createModelServiceConnections(ctx, service, { videoModels = opti
       if (!Array.isArray(rows) || rows.length > 256 || rows.some(row => !object(row) || !identifier(row.id) || !identifier(row.name) ||
         !['volcengine', 'alibaba', 'openai'].includes(row.provider) || !['ark', 'dashscope', 'openai', 'newapi'].includes(row.protocol)) ||
         new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('Invalid video catalog')
-      return { available: rows.length > 0, reason: rows.length ? 'available' : 'no-models',
-        models: rows.map(({ id, name, provider, protocol }) => ({ id, name, provider, protocol })) }
-    } catch { return { available: false, reason: 'unavailable', models: [] } }
+      const models = rows.map(({ id, name, provider, protocol, default: selected }) => ({ id, name, provider, protocol, ...(selected === true ? { default: true } : {}) }))
+      // Mirror the server's own resolution: its configured default, else the first model.
+      const defaultModel = models.find(model => model.default === true)?.id ?? models[0]?.id ?? ''
+      return { available: rows.length > 0, reason: rows.length ? 'available' : 'no-models', models, defaultModel }
+    } catch { return { available: false, reason: 'unavailable', models: [], defaultModel: '' } }
     finally { if (onAbort) signal.removeEventListener('abort', onAbort) }
   }
   const remember = (map, record) => {

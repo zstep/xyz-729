@@ -58,13 +58,13 @@ function fixture(options = {}) {
 test('overview exposes only bounded public video metadata without expanding facade model authority', async () => {
   const f = fixture({ videoModels: async () => [
     { id: 'doubao-seedance-2-5-260628', name: 'Seedance', provider: 'volcengine', protocol: 'ark', apiKey: 'must-not-expose', endpoint: 'https://private.invalid' },
-    { id: 'sora-2', name: 'Sora', provider: 'openai', protocol: 'openai' }
+    { id: 'sora-2', name: 'Sora', provider: 'openai', protocol: 'openai', default: true }
   ] })
   const result = await f.controller.overview()
   assert.deepEqual(result.video, { available: true, reason: 'available', models: [
     { id: 'doubao-seedance-2-5-260628', name: 'Seedance', provider: 'volcengine', protocol: 'ark' },
-    { id: 'sora-2', name: 'Sora', provider: 'openai', protocol: 'openai' }
-  ] })
+    { id: 'sora-2', name: 'Sora', provider: 'openai', protocol: 'openai', default: true }
+  ], defaultModel: 'sora-2' })
   assert.equal(result.models.some(model => model.id.startsWith('doubao-')), false)
   assert.equal(JSON.stringify(result).includes('must-not-expose'), false)
   assert.equal(JSON.stringify(result).includes('private.invalid'), false)
@@ -73,12 +73,12 @@ test('overview exposes only bounded public video metadata without expanding faca
 test('unavailable or malformed video catalog leaves ordinary overview available', async () => {
   for (const videoModels of [async () => { throw new Error('fixture secret') }, async () => [{ id: 'sora-2', name: 'Sora', provider: 'unknown', protocol: 'openai' }]]) {
     const result = await fixture({ videoModels }).controller.overview()
-    assert.deepEqual(result.video, { available: false, reason: 'unavailable', models: [] })
+    assert.deepEqual(result.video, { available: false, reason: 'unavailable', models: [], defaultModel: '' })
     assert.equal(result.availability.chat.available, true)
     assert.equal(result.availability.image.available, true)
   }
   assert.deepEqual((await fixture({ videoModels: async () => [] }).controller.overview()).video,
-    { available: false, reason: 'no-models', models: [] })
+    { available: false, reason: 'no-models', models: [], defaultModel: '' })
 })
 
 test('connect-all previews only declared facade consumers, skips conflicts and preserves selections', async () => {

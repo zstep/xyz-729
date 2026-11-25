@@ -108,7 +108,9 @@ export function createModelService({ llm, getBindings = () => ({}), signal, tran
     // Server defaults may name the display alias while the catalog id is versioned;
     // expose the matched catalog id so a selection stays routable.
     const defaultMatch = defaults.defaultModels.map(id => models.find(model => model.id === id || model.name === id)).find(Boolean)
-    return { models, ...(defaultMatch === undefined ? {} : { defaultModel: defaultMatch.id }) }
+    // Mirror the server: an unset default falls back to the catalog's first chat model.
+    const selected = defaultMatch ?? models[0]
+    return { models, ...(selected === undefined ? {} : { defaultModel: selected.id }) }
   }
   /** Server-declared chat defaults as validated IDs. Never a catalog-order fallback. */
   async function chatDefaults(options = {}) {
