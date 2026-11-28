@@ -133,6 +133,36 @@ function modelDisplayName(id: string, metadata: { alias?: string; name?: string 
   return metadata?.alias ?? metadata?.name ?? id
 }
 
+function projectImageDefaultMetadata(
+  value: Record<string, unknown>,
+  rows: unknown[]
+): unknown[] {
+  const defaultModel = value.defaultModel
+  if (!defaultModel || typeof defaultModel !== 'object' || Array.isArray(defaultModel)) return rows
+  const defaultRecord = defaultModel as Record<string, unknown>
+  if (typeof defaultRecord.id !== 'string' || !displayText(defaultRecord.id)) return rows
+  const defaultId = defaultRecord.id
+  const imageIds = new Set<string>()
+  if (Array.isArray(value.models)) {
+    for (const item of value.models) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const record = item as Record<string, unknown>
+        if (typeof record.id === 'string' && displayText(record.id)) imageIds.add(record.id)
+      }
+    }
+  }
+  if (!imageIds.has(defaultId)) return rows
+  return rows.map(row => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row
+    const model = row as Record<string, unknown>
+    if (model.id !== defaultId) return row
+    const info = model.info && typeof model.info === 'object' && !Array.isArray(model.info) ? model.info as Record<string, unknown> : {}
+    const meta = info.meta && typeof info.meta === 'object' && !Array.isArray(info.meta) ? info.meta as Record<string, unknown> : {}
+    if (typeof meta.imageModelId === 'string' && meta.imageModelId.trim()) return row
+    return { ...model, info: { ...info, meta: { ...meta, imageModelId: defaultId } } }
+  })
+}
+
 async function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   let abort = () => {}
   try {
@@ -575,6 +605,31 @@ export async function startPengbaoGateway(options: PengbaoGatewayOptions): Promi
       }
       if (!upstream.ok) throw new RequestFailure(upstream.status, upstream.status)
       const sse = upstream.headers.get('content-type')?.split(';')[0]?.trim() === 'text/event-stream'
+      if (isModels && !sse && reader && upstream.headers.get('content-type')?.split(';')[0]?.trim() === 'application/json') {
+        const chunks: Buffer[] = []
+        let size = 0
+        while (true) {
+          const { done, value } = await abortable(reader.read(), controller.signal)
+          if (done) break
+          size += value.byteLength
+          if (size > maxBody) throw new RequestFailure(502)
+          chunks.push(Buffer.from(value))
+        }
+        let catalog: Record<string, unknown>
+        try {
+          const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid catalog')
+          catalog = parsed as Record<string, unknown>
+        } catch { throw new RequestFailure(502) }
+        let projected = Array.isArray(catalog.data) ? catalog.data : []
+        if (projected.length > 0) {
+          try { projected = projectImageDefaultMetadata(await metadata('/api/v1/images/metadata'), projected) }
+          catch { /* Image metadata is optional for the ordinary model list. */ }
+        }
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
+        res.end(JSON.stringify({ ...catalog, data: projected }))
+        return
+      }
       res.writeHead(200, { 'content-type': sse ? 'text/event-stream' : 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
       res.flushHeaders()
       while (reader) {

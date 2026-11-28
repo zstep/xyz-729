@@ -149,6 +149,82 @@ describe('startup configuration recovery', () => {
     expect(show).not.toHaveBeenCalled()
   })
 
+  it('resets a corrupt root patch and retries without manual recovery', async () => {
+    const path = await file('cordis.patch.yml', '[broken')
+    const show = vi.fn(async () => { throw new Error('manual recovery should not be shown') })
+    const result = await recoverStartupConfiguration({
+      dshHome: home,
+      chinese: false,
+      environment: {},
+      stop: vi.fn(async () => {}),
+      show,
+      selectFile: vi.fn(),
+      reveal: vi.fn(),
+      note: vi.fn()
+    })
+    expect(result).toBe('retry')
+    expect(show).not.toHaveBeenCalled()
+    expect(await readFile(path, 'utf8')).toBe('[]\n')
+    const backup = (await readdir(home)).find(name => name.endsWith('.bak'))
+    expect(backup).toBeDefined()
+    expect(await readFile(join(home, backup!), 'utf8')).toBe('[broken')
+  })
+
+  it('resets a non-list Profile patch and retries without manual recovery', async () => {
+    const path = await file('profiles/web/cordis.patch.yml', 'config: value\n')
+    const show = vi.fn(async () => { throw new Error('manual recovery should not be shown') })
+    const result = await recoverStartupConfiguration({
+      dshHome: home,
+      chinese: false,
+      environment: {},
+      stop: vi.fn(async () => {}),
+      show,
+      selectFile: vi.fn(),
+      reveal: vi.fn(),
+      note: vi.fn()
+    })
+    expect(result).toBe('retry')
+    expect(show).not.toHaveBeenCalled()
+    expect(await readFile(path, 'utf8')).toBe('[]\n')
+    const backup = (await readdir(join(home, 'profiles', 'web'))).find(name => name.endsWith('.bak'))
+    expect(backup).toBeDefined()
+    expect(await readFile(join(home, 'profiles', 'web', backup!), 'utf8')).toBe('config: value\n')
+  })
+
+  it('does not auto-reset malformed settings.yaml', async () => {
+    const path = await file('settings.yaml', '[broken')
+    const show = vi.fn(async () => ({ response: 3 }))
+    await expect(recoverStartupConfiguration({
+      dshHome: home,
+      chinese: false,
+      environment: {},
+      stop: vi.fn(async () => {}),
+      show,
+      selectFile: vi.fn(),
+      reveal: vi.fn(),
+      note: vi.fn()
+    })).resolves.toBe('continue')
+    expect(show).toHaveBeenCalledOnce()
+    expect(await readFile(path, 'utf8')).toBe('[broken')
+  })
+
+  it('leaves a valid root patch unchanged', async () => {
+    const path = await file('cordis.patch.yml', '- id: valid\n')
+    const show = vi.fn(async () => { throw new Error('valid patch should not open recovery') })
+    await expect(recoverStartupConfiguration({
+      dshHome: home,
+      chinese: false,
+      environment: {},
+      stop: vi.fn(async () => {}),
+      show,
+      selectFile: vi.fn(),
+      reveal: vi.fn(),
+      note: vi.fn()
+    })).resolves.toBe('continue')
+    expect(show).not.toHaveBeenCalled()
+    expect(await readFile(path, 'utf8')).toBe('- id: valid\n')
+  })
+
   it('marks pi-ai invalid endpoints and environment variables as non-blocking to keep UI editable', async () => {
     const text = '- id: llm-pi-ai\n  config:\n    providers:\n      broken:\n        baseURL: missing-protocol\n'
     const path = await file('profiles/web/cordis.patch.yml', text)

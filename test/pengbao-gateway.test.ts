@@ -132,6 +132,72 @@ describe('Pengbao gateway', () => {
     expect(result.headers['access-control-allow-origin']).toBeUndefined()
   })
 
+  it('projects the authenticated image default into the matching model metadata', async () => {
+    const gateway = await gatewayFor(async (req, res) => {
+      if (req.url === '/api/v1/models') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ data: [
+          { id: 'gpt-image-2.5-sunburst', name: 'Sunburst' },
+          { id: 'chat-model', name: 'Chat' }
+        ] }))
+        return
+      }
+      if (req.url === '/api/v1/images/metadata') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({
+          models: [{ id: 'gpt-image-2.5-sunburst', name: 'Sunburst' }],
+          defaultModel: { id: 'gpt-image-2.5-sunburst', name: 'Sunburst' },
+          selection: 'request-local',
+          catalogStatus: 'available'
+        }))
+        return
+      }
+      res.end('{}')
+    })
+    const result = await request(gateway)
+    expect(result.status).toBe(200)
+    expect(JSON.parse(result.body)).toEqual({ data: [
+      { id: 'gpt-image-2.5-sunburst', name: 'Sunburst', info: { meta: { imageModelId: 'gpt-image-2.5-sunburst' } } },
+      { id: 'chat-model', name: 'Chat' }
+    ] })
+  })
+
+  it('does not project an image default absent from the image catalog', async () => {
+    const gateway = await gatewayFor(async (req, res) => {
+      if (req.url === '/api/v1/models') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ data: [{ id: 'chat-model', name: 'Chat' }] }))
+        return
+      }
+      if (req.url === '/api/v1/images/metadata') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ models: [], defaultModel: { id: 'gpt-image-2.5-sunburst', name: 'Sunburst' }, selection: 'request-local', catalogStatus: 'default-only' }))
+        return
+      }
+      res.end('{}')
+    })
+    const result = await request(gateway)
+    expect(JSON.parse(result.body)).toEqual({ data: [{ id: 'chat-model', name: 'Chat' }] })
+  })
+
+  it('preserves explicit imageModelId metadata over the server default', async () => {
+    const gateway = await gatewayFor(async (req, res) => {
+      if (req.url === '/api/v1/models') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ data: [{ id: 'gpt-image-2.5-sunburst', info: { meta: { imageModelId: 'explicit-image' } } }] }))
+        return
+      }
+      if (req.url === '/api/v1/images/metadata') {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ models: [{ id: 'gpt-image-2.5-sunburst', name: 'Sunburst' }], defaultModel: { id: 'gpt-image-2.5-sunburst', name: 'Sunburst' }, selection: 'request-local', catalogStatus: 'available' }))
+        return
+      }
+      res.end('{}')
+    })
+    const result = await request(gateway)
+    expect(JSON.parse(result.body).data[0].info.meta.imageModelId).toBe('explicit-image')
+  })
+
   it('accepts Node fetch while still rejecting browser-originated requests', async () => {
     const upstream = vi.fn((_req: IncomingMessage, res: ServerResponse) => { res.end('{"data":[]}') })
     const gateway = await gatewayFor(upstream)

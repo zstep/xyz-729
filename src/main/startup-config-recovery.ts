@@ -28,6 +28,17 @@ export async function recoverStartupConfiguration(ops: ConfigRecoveryOperations)
     if (ops.cancelled?.()) return 'continue'
     const problem = (await inspectStartupConfiguration(ops.dshHome, ops.profile, ops.environment, ops.launchDirectory))[0]
     if (!problem) return changed ? 'retry' : 'continue'
+    if (problem.kind === 'yaml-format' && problem.repair === 'reset-patch' && problem.path.endsWith('.patch.yml')) {
+      try {
+        await ops.stop()
+        const backup = await repairStartupConfig(ops.dshHome, problem)
+        changed = true
+        ops.note(`[desktop] configuration recovery reset corrupt patch to an empty list; backup: ${backup}`)
+        continue
+      } catch (error) {
+        ops.note(`[desktop] configuration recovery automatic patch reset failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
     if (problem.kind === 'legacy-workflow' && problem.repair) {
       try {
         await ops.stop()

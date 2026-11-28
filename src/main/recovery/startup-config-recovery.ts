@@ -13,7 +13,7 @@ export interface StartupConfigProblem {
   source: string
   /** Safe descriptions contain field names, never configuration values. */
   detail: string
-  repair?: 'normalize' | 'reset-endpoint' | 'disable-legacy' | 'replace-legacy'
+  repair?: 'normalize' | 'reset-endpoint' | 'disable-legacy' | 'replace-legacy' | 'reset-patch'
   manualOnly?: boolean
   blocking?: boolean
 }
@@ -43,6 +43,9 @@ function analyzeYaml(path: string, text: string, action?: StartupConfigProblem['
   const problems: StartupConfigProblem[] = []
   let changed = false
   let explicitDeepSeekEndpoint = false
+  if (action === 'reset-patch' && path.endsWith('.patch.yml')) {
+    return { problems, text: '[]\n', explicitDeepSeekEndpoint }
+  }
   const problem = (
     kind: ConfigProblemKind,
     source: string,
@@ -53,12 +56,12 @@ function analyzeYaml(path: string, text: string, action?: StartupConfigProblem['
     problems.push({ kind, path, source, detail, ...(repair ? { repair } : {}), ...(blocking ? {} : { blocking: false }) })
   }
   if (document.errors.length || (!isSeq(document.contents) && !isMap(document.contents) && document.contents !== null)) {
-    problem('yaml-format', 'YAML', 'Invalid YAML document or root structure')
+    problem('yaml-format', 'YAML', 'Invalid YAML document or root structure', path.endsWith('.patch.yml') ? 'reset-patch' : undefined)
     return { problems, text, explicitDeepSeekEndpoint }
   }
   if ((path.endsWith('.patch.yml') || basename(path) === 'agent.cordis.yml') &&
     document.contents !== null && !isSeq(document.contents)) {
-    problem('yaml-format', 'YAML', 'Composition patches must contain a plugin list')
+    problem('yaml-format', 'YAML', 'Composition patches must contain a plugin list', path.endsWith('.patch.yml') ? 'reset-patch' : undefined)
     return { problems, text, explicitDeepSeekEndpoint }
   }
   const endpoint = (config: unknown, source: string, deepseek: boolean): void => {
